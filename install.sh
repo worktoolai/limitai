@@ -356,15 +356,28 @@ if [ ${#UPDATED_PROFILES[@]} -gt 0 ]; then
     export PATH="${INSTALL_DIR}:$PATH"
 fi
 
-printf "  Enable background recording? (polls rate limits, stores history) [y/N] "
-read -r REPLY </dev/tty 2>/dev/null || REPLY=""
+DAEMON_INSTALLED=false
+if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/Library/LaunchAgents/com.limitai.watcher.plist" ]; then
+    DAEMON_INSTALLED=true
+elif [ "$(uname -s)" = "Linux" ] && [ -f "$HOME/.config/systemd/user/limitai.service" ]; then
+    DAEMON_INSTALLED=true
+fi
 
-if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
+if [ "$DAEMON_INSTALLED" = true ]; then
+    echo "  Background daemon detected — reinstalling to pick up new binary..."
     echo ""
     "$LIMITAI_BIN" install
 else
-    echo ""
-    echo "  Skipped. You can enable it later with: limitai install"
+    printf "  Enable background recording? (polls rate limits, stores history) [y/N] "
+    read -r REPLY </dev/tty 2>/dev/null || REPLY=""
+
+    if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
+        echo ""
+        "$LIMITAI_BIN" install
+    else
+        echo ""
+        echo "  Skipped. You can enable it later with: limitai install"
+    fi
 fi
 
 echo ""
