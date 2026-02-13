@@ -1,0 +1,23 @@
+{
+  "name": "limitai",
+  "version": "0.1.0",
+  "description": "LLM rate limit utilization monitor CLI",
+  "type": "module",
+  "bin": {
+    "limitai": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "bun build src/cli.ts --outdir dist --target bun",
+    "typecheck": "tsc --noEmit",
+    "test:linux-systemd:docker": "bash scripts/test-linux-systemd-docker.sh"
+  },
+  "dependencies": {
+    "gunshi": "latest",
+    "valibot": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "latest"
+  }
+}
