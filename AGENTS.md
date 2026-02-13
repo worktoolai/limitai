@@ -1,7 +1,6 @@
 # limitai — Project Knowledge Base
 
-**Status:** Pre-implementation (design complete, no source code yet)
-**Rename pending:** `usage-monitor` dir → `limitai`
+**Status:** Implemented (v0.1.x)
 
 ## OVERVIEW
 
@@ -13,7 +12,7 @@ CLI tool monitoring LLM rate limit **utilization** (not cost). Auto-discovers Co
 limitai/
 ├── DESIGN.md              # Full design spec (source of truth)
 ├── AGENTS.md              # This file
-├── opencode.json          # OpenCode editor config
+├── Claude.json          # Claude Code editor config
 └── analysis/              # Reference codebases (read-only, not shipped)
     ├── ccusage/            # Token/cost tracker CLI (JSONL parsing reference)
     ├── claude-code/        # Claude Code repo (README/CHANGELOG only, closed source)
@@ -70,14 +69,32 @@ limitai/
 ## COMMANDS
 
 ```bash
-# Not yet implemented. Target commands:
 limitai status          # Current rate limits
+limitai list            # Discovered accounts
 limitai daily           # Daily utilization history
 limitai monthly         # Monthly utilization history
-limitai list            # Discovered accounts
 limitai install         # Background polling daemon
 limitai uninstall       # Remove daemon
 limitai doctor          # Connection diagnostics
+limitai watch           # Run foreground polling loop
+```
+
+## RELEASE
+
+```bash
+# 1. Bump version in both files
+#    - package.json: "version" field
+#    - src/cli.ts: version in cli() call
+
+# 2. Build 4 platform binaries
+bun build --compile --target=bun-darwin-arm64 --outfile dist/limitai-macos-arm64 src/cli.ts
+bun build --compile --target=bun-darwin-x64 --outfile dist/limitai-macos-x64 src/cli.ts
+bun build --compile --target=bun-linux-x64 --outfile dist/limitai-linux-x64 src/cli.ts
+bun build --compile --target=bun-linux-arm64 --outfile dist/limitai-linux-arm64 src/cli.ts
+
+# 3. Commit, push, create release
+git add -A && git commit -m "..." && git push
+gh release create v0.x.x dist/limitai-* --title "v0.x.x — Title" --notes "..."
 ```
 
 ## NOTES
@@ -86,15 +103,3 @@ limitai doctor          # Connection diagnostics
 - Claude Code is closed source. No auth source code available. CLI bridge (`claude -p "/stats"`) is the only integration path.
 - Codex endpoints `/wham/usage` and `/api/codex/usage` are private. Treat as best-effort with probe logic.
 - CLIProxyAPI ecosystem has GUI tools (Quotio, ZeroLimit) doing similar quota tracking. limitai is CLI-first.
-- Project directory is still named `usage-monitor`. Rename to `limitai` when scaffolding begins.
-
-## IMPLEMENTATION PHASES
-
-| Phase | Scope | Estimate |
-|-------|-------|----------|
-| 1 | Scaffold + Codex native auth → `status` | 1d |
-| 2 | CLIProxyAPI auto-discovery + multi-account | 0.5d |
-| 3 | Claude CLI bridge (`/stats`) | 0.5d |
-| 4 | SQLite + `install`/`uninstall` + adaptive polling | 1d |
-| 5 | `daily` + `monthly` aggregation | 0.5d |
-| 6 | `doctor` + `list` + polish | 0.5d |
