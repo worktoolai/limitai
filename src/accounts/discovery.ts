@@ -16,6 +16,9 @@ export async function discoverAndFetch(filterAccount?: string): Promise<Discover
   const errors: string[] = []
   const config = await loadConfig()
   
+  // Dedup: same OpenAI account can exist in both ~/.codex/auth.json and ~/.cli-proxy-api/. Native wins.
+  const seenAccountIds = new Set<string>()
+  
   try {
     const codexAuth = await readCodexAuth()
     if (codexAuth) {
@@ -24,6 +27,9 @@ export async function discoverAndFetch(filterAccount?: string): Promise<Discover
       
       if (!filterAccount || result.account.id === filterAccount) {
         results.push(result)
+      }
+      if (codexAuth.accountId) {
+        seenAccountIds.add(codexAuth.accountId)
       }
     }
   } catch (err: unknown) {
@@ -37,8 +43,19 @@ export async function discoverAndFetch(filterAccount?: string): Promise<Discover
     
     const baseUrl = await getCodexBaseUrl()
     
+    const uniqueAccounts = accounts.filter((acct) => {
+      const oauthId = acct.token.account_id
+      if (oauthId && seenAccountIds.has(oauthId)) {
+        return false
+      }
+      if (oauthId) {
+        seenAccountIds.add(oauthId)
+      }
+      return true
+    })
+    
     const proxyResults = await Promise.allSettled(
-      accounts.map(async (acct) => {
+      uniqueAccounts.map(async (acct) => {
         const credentials = toCodexCredentials(acct.token)
         const result = await fetchCodexRateLimits(baseUrl, credentials)
         return {
