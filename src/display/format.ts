@@ -1,11 +1,11 @@
 import type { RateLimitResult, RateLimitWindow } from '../providers/types.ts'
 
-const BAR_WIDTH = 14
+const BAR_WIDTH = 10
 
 function progressBar(percent: number): string {
   const filled = Math.round((percent / 100) * BAR_WIDTH)
   const empty = BAR_WIDTH - filled
-  return '|'.repeat(filled) + '.'.repeat(empty)
+  return '\u2588'.repeat(filled) + '\u2591'.repeat(empty)
 }
 
 function formatTimeRemaining(resetsAt: string | null): string {
