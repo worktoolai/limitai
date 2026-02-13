@@ -1,6 +1,14 @@
 import { define } from 'gunshi'
 import { getDb } from '../storage/db.ts'
 
+const BAR_WIDTH = 10
+
+function usageBar(percent: number): string {
+  const filled = Math.round((percent / 100) * BAR_WIDTH)
+  const empty = BAR_WIDTH - filled
+  return '\u2588'.repeat(filled) + '\u2591'.repeat(empty)
+}
+
 interface DailyRow {
   date: string
   account_id: string
@@ -38,35 +46,38 @@ function queryDailyAggregation(since: string, until: string, account?: string): 
   return db.prepare(query).all(...params) as DailyRow[]
 }
 
+function formatProviderCell(provider: string, peakPercent: number, nameWidth: number): string {
+  const pct = `${Math.round(peakPercent)}%`.padStart(4)
+  return `${provider.padEnd(nameWidth)} ${usageBar(peakPercent)} ${pct}`
+}
+
 function formatDailyTable(rows: DailyRow[]): string {
   if (rows.length === 0) {
     return 'No snapshot data found. Run `limitai install` (or `limitai watch`) to start collecting data.'
   }
-  
-  const lines: string[] = []
-  
-  // Group by provider
-  const byProvider = new Map<string, DailyRow[]>()
+
+  const byDate = new Map<string, DailyRow[]>()
   for (const row of rows) {
-    const key = row.provider.charAt(0).toUpperCase() + row.provider.slice(1)
-    if (!byProvider.has(key)) byProvider.set(key, [])
-    byProvider.get(key)!.push(row)
+    if (!byDate.has(row.date)) byDate.set(row.date, [])
+    byDate.get(row.date)!.push(row)
   }
-  
-  for (const [provider, providerRows] of byProvider) {
-    lines.push('')
-    lines.push(`--- ${provider} ${'---'.padStart(40 - provider.length, '-')}`)
-    
-    for (const row of providerRows) {
-      const dateStr = formatShortDate(row.date)
-      const windowLabel = row.provider === 'claude' ? 'blocks' : 'windows'
-      const windowCount = String(row.window_count).padStart(2)
-      const avg = `avg ${Math.round(row.avg_percent)}%`
-      const peak = `peak ${Math.round(row.peak_percent)}%`
-      lines.push(`  ${dateStr}  ${windowCount} ${windowLabel.padEnd(8)} ${avg.padEnd(8)} ${peak}`)
-    }
+
+  const allProviders = [...new Set(rows.map(r => r.provider))].sort()
+
+  const lines: string[] = []
+
+  for (const [date, dateRows] of byDate) {
+    const byProvider = new Map(dateRows.map(r => [r.provider, r]))
+    const nameWidth = Math.max(...allProviders.map(p => p.length))
+    const cells = allProviders.map(p => {
+      const row = byProvider.get(p)
+      return row
+        ? formatProviderCell(p, row.peak_percent, nameWidth)
+        : `${p.padEnd(nameWidth)} ${'—'.repeat(BAR_WIDTH)}  ${'—%'.padStart(4)}`
+    })
+    lines.push(`${formatShortDate(date)}  ${cells.join(' │ ')}`)
   }
-  
+
   return lines.join('\n')
 }
 

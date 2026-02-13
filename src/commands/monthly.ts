@@ -1,6 +1,14 @@
 import { define } from 'gunshi'
 import { getDb } from '../storage/db.ts'
 
+const BAR_WIDTH = 10
+
+function usageBar(percent: number): string {
+  const filled = Math.round((percent / 100) * BAR_WIDTH)
+  const empty = BAR_WIDTH - filled
+  return '\u2588'.repeat(filled) + '\u2591'.repeat(empty)
+}
+
 interface MonthlyRow {
   month: string
   account_id: string
@@ -39,34 +47,38 @@ function queryMonthlyAggregation(account?: string): MonthlyRow[] {
   return db.prepare(query).all(...params) as MonthlyRow[]
 }
 
+function formatProviderCell(provider: string, peakPercent: number, nameWidth: number): string {
+  const pct = `${Math.round(peakPercent)}%`.padStart(4)
+  return `${provider.padEnd(nameWidth)} ${usageBar(peakPercent)} ${pct}`
+}
+
 function formatMonthlyTable(rows: MonthlyRow[]): string {
   if (rows.length === 0) {
     return 'No snapshot data found. Run `limitai install` (or `limitai watch`) to start collecting data.'
   }
-  
-  const lines: string[] = []
-  const byProvider = new Map<string, MonthlyRow[]>()
-  
+
+  const byMonth = new Map<string, MonthlyRow[]>()
   for (const row of rows) {
-    const key = row.provider.charAt(0).toUpperCase() + row.provider.slice(1)
-    if (!byProvider.has(key)) byProvider.set(key, [])
-    byProvider.get(key)!.push(row)
+    if (!byMonth.has(row.month)) byMonth.set(row.month, [])
+    byMonth.get(row.month)!.push(row)
   }
-  
-  for (const [provider, providerRows] of byProvider) {
-    lines.push('')
-    lines.push(`--- ${provider} ${'---'.padStart(40 - provider.length, '-')}`)
-    
-    for (const row of providerRows) {
-      const windowLabel = row.provider === 'claude' ? 'blocks' : 'windows'
-      const windows = String(row.total_windows).padStart(3)
-      const avg = `avg ${Math.round(row.avg_percent)}%`
-      const peak = `peak ${Math.round(row.peak_percent)}%`
-      const days = `${row.days_active}d active`
-      lines.push(`  ${row.month}  ${windows} ${windowLabel.padEnd(8)} ${avg.padEnd(8)} ${peak.padEnd(9)} ${days}`)
-    }
+
+  const allProviders = [...new Set(rows.map(r => r.provider))].sort()
+
+  const lines: string[] = []
+
+  for (const [month, monthRows] of byMonth) {
+    const byProvider = new Map(monthRows.map(r => [r.provider, r]))
+    const nameWidth = Math.max(...allProviders.map(p => p.length))
+    const cells = allProviders.map(p => {
+      const row = byProvider.get(p)
+      return row
+        ? formatProviderCell(p, row.peak_percent, nameWidth)
+        : `${p.padEnd(nameWidth)} ${'\u2014'.repeat(BAR_WIDTH)}  ${'\u2014%'.padStart(4)}`
+    })
+    lines.push(`${month}  ${cells.join(' \u2502 ')}`)
   }
-  
+
   return lines.join('\n')
 }
 

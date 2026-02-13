@@ -120,14 +120,9 @@ limitai install
 ```
 $ limitai daily
 
---- Codex ------------------------------------
-  02/13  12 windows  avg 67%  peak 94%  ██████████████████░░  94%
-  02/12   8 windows  avg 45%  peak 72%  ██████████████░░░░░░  72%
-  02/11  10 windows  avg 52%  peak 81%  ████████████████░░░░  81%
-
---- Claude -----------------------------------
-  02/13   2 blocks   avg 58%  peak 91%  ██████████████████░░  91%
-  02/12   3 blocks   avg 73%  peak 88%  █████████████████░░░  88%
+02/13  claude █████████░  91% │ codex  █████████░  94%
+02/12  claude ████████░░  88% │ codex  ███████░░░  72%
+02/11  claude ██████░░░░  58% │ codex  ████████░░  81%
 ```
 
 ### `limitai monthly` — unlocked after install
@@ -135,13 +130,8 @@ $ limitai daily
 ```
 $ limitai monthly
 
---- Codex (codex-native) ----------------------------------------
-  Feb 2026  avg 61%  peak 97%  ████████████████████░  97%
-  Jan 2026  avg 48%  peak 85%  █████████████████░░░░  85%
-
---- Claude (claude-local) ---------------------------------------
-  Feb 2026  avg 55%  peak 92%  ██████████████████░░░  92%
-  Jan 2026  avg 42%  peak 78%  ███████████████░░░░░░  78%
+2026-02  claude █████████░  92% │ codex  ██████████  97%
+2026-01  claude ████████░░  78% │ codex  █████████░  85%
 ```
 
 ### How it works under the hood
