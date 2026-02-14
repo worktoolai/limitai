@@ -16,14 +16,24 @@ Tools like [ccusage](https://github.com/yohasebe/ccusage) track how many tokens 
 - **Zero config** — auto-discovers credentials from your machine
 - **Background recording** — `limitai install` sets up a LaunchAgent/systemd daemon for historical tracking
 
-<p align="center">
-  <img src="img/status.png" alt="limitai status" width="600">
-</p>
-
-<p align="center">
-  <img src="img/daily.png" alt="limitai daily" width="500">
-  <img src="img/monthly.png" alt="limitai monthly" width="500">
-</p>
+<table align="center">
+  <tr>
+    <td colspan="2" align="center">
+      <code>limitai status</code><br><br>
+      <img src="img/status.png" alt="limitai status" width="600">
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <code>limitai daily</code><br><br>
+      <img src="img/daily.png" alt="limitai daily" width="400">
+    </td>
+    <td align="center">
+      <code>limitai monthly</code><br><br>
+      <img src="img/monthly.png" alt="limitai monthly" width="400">
+    </td>
+  </tr>
+</table>
 
 ## Install
 

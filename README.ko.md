@@ -16,14 +16,24 @@
 - **Zero config** — 로컬 머신의 credential을 자동 탐지
 - **Background recording** — `limitai install` 한 번으로 LaunchAgent/systemd daemon 설정 및 히스토리 추적
 
-<p align="center">
-  <img src="img/status.png" alt="limitai status" width="600">
-</p>
-
-<p align="center">
-  <img src="img/daily.png" alt="limitai daily" width="500">
-  <img src="img/monthly.png" alt="limitai monthly" width="500">
-</p>
+<table align="center">
+  <tr>
+    <td colspan="2" align="center">
+      <code>limitai status</code><br><br>
+      <img src="img/status.png" alt="limitai status" width="600">
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <code>limitai daily</code><br><br>
+      <img src="img/daily.png" alt="limitai daily" width="400">
+    </td>
+    <td align="center">
+      <code>limitai monthly</code><br><br>
+      <img src="img/monthly.png" alt="limitai monthly" width="400">
+    </td>
+  </tr>
+</table>
 
 ## 설치
 
