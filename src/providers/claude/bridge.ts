@@ -8,47 +8,6 @@ interface ClaudeCredentials {
   subscriptionType: string
 }
 
-interface ClaudeAuthStatus {
-  loggedIn: boolean
-  authMethod: string
-}
-
-async function isClaudeAvailable(): Promise<boolean> {
-  try {
-    const proc = Bun.spawn(['which', 'claude'], { stdout: 'pipe', stderr: 'pipe' })
-    const exitCode = await proc.exited
-    return exitCode === 0
-  } catch {
-    return false
-  }
-}
-
-async function getClaudeAuthStatus(): Promise<ClaudeAuthStatus | null> {
-  try {
-    const proc = Bun.spawn(['claude', 'auth', 'status', '--json'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    const stdout = await new Response(proc.stdout).text()
-    const exitCode = await proc.exited
-    if (exitCode !== 0) {
-      return null
-    }
-
-    const parsed = asObject(JSON.parse(stdout))
-    if (!parsed) {
-      return null
-    }
-
-    return {
-      loggedIn: parsed.loggedIn === true,
-      authMethod: typeof parsed.authMethod === 'string' ? parsed.authMethod : 'unknown',
-    }
-  } catch {
-    return null
-  }
-}
-
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -334,12 +293,6 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
     source: 'native' as const,
   }
   
-  if (!await isClaudeAvailable()) {
-    return null
-  }
-
-  const authStatus = await getClaudeAuthStatus()
-
   const credentials = await readClaudeCredentials()
   if (!credentials) {
     const cachedUsage = await readHudUsageCache()
@@ -356,9 +309,7 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
       return {
         account,
         planType: 'unknown',
-        error: authStatus?.loggedIn && authStatus.authMethod === 'oauth_token'
-          ? 'Claude OAuth is connected, but quota token is not readable by limitai (using interactive-only storage)'
-          : 'Claude OAuth credentials not found - run `claude login`',
+        error: 'Claude OAuth credentials not found - run `claude login`',
         sourceConfidence: 'unknown',
       }
   }
