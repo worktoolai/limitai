@@ -49,7 +49,17 @@ export function getDb(): Database {
     CREATE INDEX IF NOT EXISTS idx_window_id
       ON snapshots(account_id, window_id);
   `)
-  
+
+  // Migration: add secondary window columns if missing
+  const cols = _db.prepare(`PRAGMA table_info(snapshots)`).all() as { name: string }[]
+  const colNames = new Set(cols.map(c => c.name))
+  if (!colNames.has('secondary_used_percent')) {
+    _db.exec(`ALTER TABLE snapshots ADD COLUMN secondary_used_percent REAL`)
+  }
+  if (!colNames.has('secondary_resets_at')) {
+    _db.exec(`ALTER TABLE snapshots ADD COLUMN secondary_resets_at TEXT`)
+  }
+
   return _db
 }
 

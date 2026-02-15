@@ -18,6 +18,8 @@ function resultToSnapshot(result: RateLimitResult) {
     usedPercent: result.primary?.usedPercent ?? null,
     windowMinutes: result.primary?.windowMinutes ?? null,
     resetsAt: result.primary?.resetsAt ?? null,
+    secondaryUsedPercent: result.secondary?.usedPercent ?? null,
+    secondaryResetsAt: result.secondary?.resetsAt ?? null,
     planType: result.planType,
     sourceConfidence: (result.sourceConfidence ?? 'direct') as 'direct' | 'estimated' | 'unknown',
     rawPayload: result,

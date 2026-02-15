@@ -14,41 +14,45 @@ interface DailyRow {
   account_id: string
   provider: string
   window_count: number
-  avg_percent: number
+  secondary_min: number | null
+  secondary_max: number | null
   peak_percent: number
 }
 
 function queryDailyAggregation(since: string, until: string, account?: string): DailyRow[] {
   const db = getDb()
-  
+
   let query = `
-    SELECT 
+    SELECT
       date(captured_at) as date,
       account_id,
       provider,
       COUNT(DISTINCT window_id) as window_count,
-      ROUND(AVG(used_percent), 1) as avg_percent,
+      MIN(secondary_used_percent) as secondary_min,
+      MAX(secondary_used_percent) as secondary_max,
       MAX(used_percent) as peak_percent
     FROM snapshots
     WHERE captured_at >= ? AND captured_at < ?
-      AND used_percent IS NOT NULL
-      AND window_id IS NOT NULL AND window_id != ''
+      AND (used_percent IS NOT NULL OR secondary_used_percent IS NOT NULL)
   `
   const params: string[] = [since, until]
-  
+
   if (account) {
     query += ' AND account_id = ?'
     params.push(account)
   }
-  
+
   query += ' GROUP BY date(captured_at), account_id, provider ORDER BY date DESC, provider, account_id'
-  
+
   return db.prepare(query).all(...params) as DailyRow[]
 }
 
-function formatProviderCell(provider: string, peakPercent: number, nameWidth: number): string {
-  const pct = `${Math.round(peakPercent)}%`.padStart(4)
-  return `${provider.padEnd(nameWidth)} ${usageBar(peakPercent)} ${pct}`
+function formatProviderCell(row: DailyRow, nameWidth: number): string {
+  const hasSecondary = row.secondary_min != null && row.secondary_max != null
+  const delta = hasSecondary ? Math.max(0, row.secondary_max! - row.secondary_min!) : row.peak_percent
+  const pct = `${Math.round(delta)}%`.padStart(4)
+  const sessions = row.window_count > 0 ? ` ×${row.window_count}` : ''
+  return `${row.provider.padEnd(nameWidth)} ${usageBar(delta)} ${pct}${sessions}`
 }
 
 function formatDailyTable(rows: DailyRow[]): string {
@@ -63,16 +67,16 @@ function formatDailyTable(rows: DailyRow[]): string {
   }
 
   const allProviders = [...new Set(rows.map(r => r.provider))].sort()
+  const nameWidth = Math.max(...allProviders.map(p => p.length))
 
   const lines: string[] = []
 
   for (const [date, dateRows] of byDate) {
     const byProvider = new Map(dateRows.map(r => [r.provider, r]))
-    const nameWidth = Math.max(...allProviders.map(p => p.length))
     const cells = allProviders.map(p => {
       const row = byProvider.get(p)
       return row
-        ? formatProviderCell(p, row.peak_percent, nameWidth)
+        ? formatProviderCell(row, nameWidth)
         : `${p.padEnd(nameWidth)} ${'—'.repeat(BAR_WIDTH)}  ${'—%'.padStart(4)}`
     })
     lines.push(`${formatShortDate(date)}  ${cells.join(' │ ')}`)

@@ -4,8 +4,8 @@ import type { NormalizedSnapshot } from '../providers/types.ts'
 export function insertSnapshot(snapshot: NormalizedSnapshot): void {
   const db = getDb()
   const stmt = db.prepare(`
-    INSERT INTO snapshots (account_id, captured_at, provider, window_id, used_percent, window_minutes, resets_at, plan_type, source_confidence, raw_payload)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO snapshots (account_id, captured_at, provider, window_id, used_percent, window_minutes, resets_at, secondary_used_percent, secondary_resets_at, plan_type, source_confidence, raw_payload)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
   stmt.run(
     snapshot.accountId,
@@ -15,6 +15,8 @@ export function insertSnapshot(snapshot: NormalizedSnapshot): void {
     snapshot.usedPercent,
     snapshot.windowMinutes,
     snapshot.resetsAt,
+    snapshot.secondaryUsedPercent,
+    snapshot.secondaryResetsAt,
     snapshot.planType,
     snapshot.sourceConfidence,
     JSON.stringify(snapshot.rawPayload),
@@ -95,6 +97,8 @@ function mapRowToSnapshot(row: Record<string, unknown>): NormalizedSnapshot {
     usedPercent: row.used_percent as number | null,
     windowMinutes: row.window_minutes as number | null,
     resetsAt: row.resets_at as string | null,
+    secondaryUsedPercent: row.secondary_used_percent as number | null,
+    secondaryResetsAt: row.secondary_resets_at as string | null,
     planType: row.plan_type as string | null,
     sourceConfidence: (row.source_confidence as 'direct' | 'estimated' | 'unknown') ?? 'unknown',
     rawPayload: row.raw_payload ? JSON.parse(row.raw_payload as string) : null,

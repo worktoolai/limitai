@@ -14,42 +14,46 @@ interface MonthlyRow {
   account_id: string
   provider: string
   total_windows: number
-  avg_percent: number
-  peak_percent: number
   days_active: number
+  peak_percent: number
+  secondary_min: number | null
+  secondary_max: number | null
 }
 
 function queryMonthlyAggregation(account?: string): MonthlyRow[] {
   const db = getDb()
-  
+
   let query = `
-    SELECT 
+    SELECT
       strftime('%Y-%m', captured_at) as month,
       account_id,
       provider,
       COUNT(DISTINCT window_id) as total_windows,
-      ROUND(AVG(used_percent), 1) as avg_percent,
+      COUNT(DISTINCT date(captured_at)) as days_active,
       MAX(used_percent) as peak_percent,
-      COUNT(DISTINCT date(captured_at)) as days_active
+      MIN(secondary_used_percent) as secondary_min,
+      MAX(secondary_used_percent) as secondary_max
     FROM snapshots
-    WHERE used_percent IS NOT NULL
-      AND window_id IS NOT NULL AND window_id != ''
+    WHERE (used_percent IS NOT NULL OR secondary_used_percent IS NOT NULL)
   `
   const params: string[] = []
-  
+
   if (account) {
     query += ' AND account_id = ?'
     params.push(account)
   }
-  
+
   query += ' GROUP BY month, account_id, provider ORDER BY month DESC, provider, account_id'
-  
+
   return db.prepare(query).all(...params) as MonthlyRow[]
 }
 
-function formatProviderCell(provider: string, peakPercent: number, nameWidth: number): string {
-  const pct = `${Math.round(peakPercent)}%`.padStart(4)
-  return `${provider.padEnd(nameWidth)} ${usageBar(peakPercent)} ${pct}`
+function formatProviderCell(row: MonthlyRow, nameWidth: number): string {
+  const hasSecondary = row.secondary_min != null && row.secondary_max != null
+  const delta = hasSecondary ? Math.max(0, row.secondary_max! - row.secondary_min!) : row.peak_percent
+  const pct = `${Math.round(delta)}%`.padStart(4)
+  const days = `${row.days_active}d`
+  return `${row.provider.padEnd(nameWidth)} ${usageBar(delta)} ${pct}  ${days}`
 }
 
 function formatMonthlyTable(rows: MonthlyRow[]): string {
@@ -64,16 +68,16 @@ function formatMonthlyTable(rows: MonthlyRow[]): string {
   }
 
   const allProviders = [...new Set(rows.map(r => r.provider))].sort()
+  const nameWidth = Math.max(...allProviders.map(p => p.length))
 
   const lines: string[] = []
 
   for (const [month, monthRows] of byMonth) {
     const byProvider = new Map(monthRows.map(r => [r.provider, r]))
-    const nameWidth = Math.max(...allProviders.map(p => p.length))
     const cells = allProviders.map(p => {
       const row = byProvider.get(p)
       return row
-        ? formatProviderCell(p, row.peak_percent, nameWidth)
+        ? formatProviderCell(row, nameWidth)
         : `${p.padEnd(nameWidth)} ${'\u2014'.repeat(BAR_WIDTH)}  ${'\u2014%'.padStart(4)}`
     })
     lines.push(`${month}  ${cells.join(' \u2502 ')}`)

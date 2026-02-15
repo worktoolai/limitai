@@ -18,6 +18,8 @@ export interface NormalizedSnapshot {
   usedPercent: number | null
   windowMinutes: number | null
   resetsAt: string | null
+  secondaryUsedPercent: number | null
+  secondaryResetsAt: string | null
   planType: string | null
   sourceConfidence: SourceConfidence
   rawPayload: unknown
