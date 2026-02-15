@@ -28,7 +28,7 @@ function queryMonthlyAggregation(account?: string): MonthlyRow[] {
       strftime('%Y-%m', captured_at) as month,
       account_id,
       provider,
-      COUNT(DISTINCT window_id) as total_windows,
+      COUNT(DISTINCT substr(window_id, 1, 13)) as total_windows,
       COUNT(DISTINCT date(captured_at)) as days_active,
       MAX(used_percent) as peak_percent,
       MIN(secondary_used_percent) as secondary_min,

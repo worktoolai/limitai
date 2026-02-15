@@ -27,7 +27,7 @@ function queryDailyAggregation(since: string, until: string, account?: string): 
       date(captured_at) as date,
       account_id,
       provider,
-      COUNT(DISTINCT window_id) as window_count,
+      COUNT(DISTINCT substr(window_id, 1, 13)) as window_count,
       MIN(secondary_used_percent) as secondary_min,
       MAX(secondary_used_percent) as secondary_max,
       MAX(used_percent) as peak_percent
