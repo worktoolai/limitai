@@ -20,7 +20,7 @@ const showHelp = args.length === 0
 
 await cli(showHelp ? ['--help'] : args, mainCommand, {
   name: 'limitai',
-  version: '0.1.8',
+  version: '0.1.9',
   description: 'LLM rate limit utilization monitor',
   renderHeader: null,
   subCommands: {
