@@ -9,22 +9,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - runner: macos-latest
-            target: bun-darwin-arm64
-            asset: limitai-macos-arm64
-          - runner: macos-latest
-            target: bun-darwin-x64
-            asset: limitai-macos-x64
-          - runner: ubuntu-latest
-            target: bun-linux-x64
-            asset: limitai-linux-x64
-          - runner: ubuntu-latest
-            target: bun-linux-arm64
-            asset: limitai-linux-arm64
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -35,12 +20,12 @@ jobs:
       - name: Build binary
         run: |
           mkdir -p dist
-          bun build --compile --target=${{ matrix.target }} --outfile dist/${{ matrix.asset }} src/cli.ts
+          bun build --compile --target=bun-darwin-arm64 --outfile dist/limitai-macos-arm64 src/cli.ts
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset }}
-          path: dist/${{ matrix.asset }}
+          name: limitai-macos-arm64
+          path: dist/limitai-macos-arm64
 
   release:
     needs: build
