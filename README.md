@@ -2,7 +2,7 @@
 
 > CLI tool that monitors LLM rate limit utilization across Claude, Codex, and CLIProxyAPI
 
-[한국어](README.ko.md)
+[한국어](README.ko.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [Español](README.es.md) | [Português](README.pt.md) | [Français](README.fr.md)
 
 **Are you getting the most out of your LLM subscription?**
 

@@ -1,20 +1,20 @@
-[English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [Español](README.es.md) | [Português](README.pt.md) | [Français](README.fr.md)
+[English](README.md) | [한국어](README.ko.md) | [中文](README.zh-CN.md) | [Español](README.es.md) | [Português](README.pt.md) | [Français](README.fr.md)
 
 # limitai
 
-> CLI tool that monitors LLM rate limit utilization across Claude, Codex, and CLIProxyAPI
+> Claude、Codex、CLIProxyAPI にまたがる LLM レート制限の利用状況を監視する CLI ツール
 
-**LLM 구독 한도를 정말 최대로 활용하고 있나요?**
+**LLM サブスクリプションの上限を本当にフル活用できていますか？**
 
-[ccusage](https://github.com/yohasebe/ccusage) 같은 도구는 내가 얼마나 많은 token을 소비했는지 보여줍니다. 하지만 limitai가 집중하는 핵심은 다릅니다. 진짜 중요한 질문은 **내가 지불하는 한도 대비 얼마나 효율적으로 사용하는가**입니다. 그리고 Claude, Codex, proxy 서비스에 걸쳐 여러 provider/account를 동시에 운용한다면, 이를 한눈에 통합해서 볼 수 있는 곳이 필요합니다.
+[ccusage](https://github.com/yohasebe/ccusage) のようなツールは消費したトークン数を追跡しますが、本当に重要な問いはそこではありません。真の問いは：**支払っているクォータのうち、実際にどれだけ使っているか？** そして Claude、Codex、プロキシサービスをまたいで複数のアカウントを使い分けているなら、すべてを一箇所で確認できる場所はありません。
 
-**limitai**는 LLM 파워 유저를 위한 **CLI rate limit monitor**입니다. 지출 금액이나 raw token 소비량이 아니라, 각 provider/account에서 현재 한도 상한선에 얼마나 근접했는지와 reset 시점을 한 터미널 화면에서 보여줍니다.
+**limitai** は LLM パワーユーザーのための **CLI レート制限モニター**です。支出額や生のトークン消費量ではなく、すべてのアカウントとプロバイダーにおける**レート制限の利用率**を一つのターミナルビューで表示します——支払っている上限にどれだけ近づいているか、そしてその上限がいつリセットされるかを表示します。
 
-- **Multi-provider dashboard** — Claude (Anthropic), Codex (OpenAI), CLIProxyAPI를 한 화면에서
-- **Multi-account support** — 개인, 팀, proxy account를 동시에
-- **Utilization-focused** — raw token 수치가 아니라 rate limit 대비 usage % 추적
-- **Zero config** — 로컬 머신의 credential을 자동 탐지
-- **Background recording** — `limitai install` 한 번으로 LaunchAgent/systemd daemon 설정 및 히스토리 추적
+- **マルチプロバイダーダッシュボード** — Claude (Anthropic)、Codex (OpenAI)、CLIProxyAPI を一画面で
+- **マルチアカウント対応** — 個人、チーム、プロキシアカウントを同時に
+- **利用率重視** — 生のトークン数ではなく、レート制限に対する使用率 % を追跡
+- **設定不要** — ローカルマシンの認証情報を自動検出
+- **バックグラウンド記録** — `limitai install` 一つで LaunchAgent/systemd デーモンを設定し、履歴を追跡
 
 <table align="center">
   <tr>
@@ -35,15 +35,15 @@
   </tr>
 </table>
 
-## 설치
+## インストール
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/worktoolai/limitai/main/install.sh | bash
 ```
 
-`~/.local/bin`에 설치되고, shell PATH도 자동으로 업데이트됩니다.
+`~/.local/bin` にインストールされ、シェルの PATH も自動的に更新されます。
 
-### 옵션
+### オプション
 
 ```bash
 # Specific version
@@ -53,24 +53,24 @@ curl -fsSL https://raw.githubusercontent.com/worktoolai/limitai/main/install.sh 
 curl -fsSL https://raw.githubusercontent.com/worktoolai/limitai/main/install.sh | bash -s -- --dir /usr/local/bin
 ```
 
-### 제거
+### アンインストール
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/worktoolai/limitai/main/install.sh | bash -s -- --uninstall
 ```
 
-binary를 제거하고 shell profile에 추가된 PATH 항목도 정리합니다.
+バイナリを削除し、シェルプロファイルに追加された PATH エントリもクリーンアップします。
 
-### 지원 플랫폼
+### 対応プラットフォーム
 
-| 플랫폼 | 아키텍처 |
+| プラットフォーム | アーキテクチャ |
 |----------|-------------|
 | macOS | Apple Silicon (arm64) |
 | macOS | Intel (x64) |
 | Linux | x64 |
 | Linux | arm64 |
 
-## 빠른 시작
+## クイックスタート
 
 ```bash
 # See your rate limits right now
@@ -80,9 +80,9 @@ limitai status
 limitai list
 ```
 
-## 히스토리 추적 활성화
+## 履歴追跡を有効にする
 
-기본적으로 limitai는 **live** snapshot만 보여줍니다. `install`을 한 번 실행하면 전체 그림을 볼 수 있습니다.
+デフォルトでは、limitai は**ライブ**スナップショットのみを表示します。`install` を一度実行するだけで全体像を把握できます：
 
 ```bash
 limitai install
@@ -94,7 +94,7 @@ limitai install
 # Run `limitai daily` anytime to see your history.
 ```
 
-### `install` 이후 달라지는 점
+### `install` 後の変化
 
 ```
                     Before                              After
@@ -109,21 +109,21 @@ limitai install
                   Point-in-time                   Continuous recording
 ```
 
-> **명령어 한 번. cron 없음. config 파일 없음.** `limitai install`만 실행하면 끝입니다.
+> **コマンド一つ。cron 不要。設定ファイル不要。** `limitai install` を実行するだけで完了です。
 
-### 얻을 수 있는 것
+### 得られるもの
 
-| 혜택 | 세부 내용 |
+| メリット | 詳細 |
 |---------|--------|
-| **Daily utilization report** | 각 account를 window별로 얼마나 강하게 사용했는지 확인 |
-| **Monthly trends** | 패턴 파악 — 예: 매주 화요일마다 90%+를 꾸준히 치는지 |
-| **Peak tracking** | 평균이 아니라 window별 최고 usage 추적 |
-| **Adaptive polling** | reset 근처에서는 1분, 평소에는 5–10분 간격 polling — 중요한 순간을 놓치지 않음 |
-| **Survives reboots** | 취약한 백그라운드 프로세스가 아니라 OS 기본 스케줄러(LaunchAgent / systemd) 사용 |
-| **30-day rolling history** | raw snapshot은 30일 보관, 일별 rollup은 영구 보관 |
-| **Zero maintenance** | log rotation이나 디스크 팽창 걱정 없이 SQLite가 처리 |
+| **Daily utilization report** | 各アカウントのウィンドウごとの使用強度を確認 |
+| **Monthly trends** | パターンを発見——例えば毎週火曜日に常に 90%+ に達しているか |
+| **Peak tracking** | 平均ではなく、ウィンドウごとの最大使用量を追跡 |
+| **Adaptive polling** | リセット時刻付近では 1 分間隔、それ以外は 5〜10 分間隔——重要な瞬間を逃さない |
+| **Survives reboots** | 脆弱なバックグラウンドプロセスではなく、OS ネイティブスケジューラ（LaunchAgent / systemd）を使用 |
+| **30-day rolling history** | 生のスナップショットは 30 日間保持、日次ロールアップは永久保持 |
+| **Zero maintenance** | ログローテーションやディスク肥大の心配なし。SQLite がすべて処理 |
 
-### 내부 동작 방식
+### 内部動作の仕組み
 
 ```
 ┌──────────────┐     poll      ┌───────────────┐    store     ┌──────────────┐
@@ -140,7 +140,7 @@ limitai install
                                                     status       daily       monthly
 ```
 
-### 언제든 제거 가능
+### いつでもアンインストール可能
 
 ```bash
 limitai uninstall
@@ -148,7 +148,7 @@ limitai uninstall
 # To also remove history: rm -rf ~/.limitai
 ```
 
-## 전체 명령어
+## 全コマンド
 
 ```bash
 limitai status          # Live rate limit dashboard (auto-refreshes)
@@ -161,6 +161,6 @@ limitai doctor          # Diagnose connection issues
 limitai watch           # Run foreground polling loop
 ```
 
-## 라이선스
+## ライセンス
 
 MIT
