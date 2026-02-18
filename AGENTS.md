@@ -81,21 +81,19 @@ limitai watch           # Run foreground polling loop
 
 ## RELEASE
 
-```bash
-# 1. Bump version in both files
-#    - package.json: "version" field
-#    - src/cli.ts: version in cli() call
+Releases are fully automated via GitHub Actions:
 
-# 2. Build 4 platform binaries
-bun build --compile --target=bun-darwin-arm64 --outfile dist/limitai-macos-arm64 src/cli.ts
-bun build --compile --target=bun-darwin-x64 --outfile dist/limitai-macos-x64 src/cli.ts
-bun build --compile --target=bun-linux-x64 --outfile dist/limitai-linux-x64 src/cli.ts
-bun build --compile --target=bun-linux-arm64 --outfile dist/limitai-linux-arm64 src/cli.ts
+1. **PR merged to `dev`** → `version-bump.yml` runs:
+   - Bumps patch version in `package.json` and `src/cli.ts`
+   - Commits with `[skip ci]` and creates a `v*` tag
+2. **Tag push** → `release.yml` runs:
+   - Builds 4 platform binaries (macos/linux × arm64/x64)
+   - Validates tag matches `package.json` version
+   - Creates GitHub release with changelog
 
-# 3. Commit, push, create release
-git add -A && git commit -m "..." && git push
-gh release create v0.x.x dist/limitai-* --title "v0.x.x — Title" --notes "..."
-```
+Version is tracked in two files (must stay in sync):
+- `package.json`: `"version"` field
+- `src/cli.ts`: `version` in `cli()` call
 
 ## NOTES
 

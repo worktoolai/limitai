@@ -1,0 +1,71 @@
+name: Version Bump & Tag
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [dev]
+
+permissions:
+  contents: write
+
+jobs:
+  version-bump:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump patch version
+        id: version
+        run: |
+          CURRENT=$(jq -r .version package.json)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Bumping ${CURRENT} -> ${NEW_VERSION} (patch)"
+
+          # Update package.json
+          jq --arg v "$NEW_VERSION" '.version = $v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          # Update src/cli.ts
+          sed -i "s/version: '[^']*'/version: '${NEW_VERSION}'/" src/cli.ts
+
+      - name: Verify version consistency
+        run: |
+          PKG_VERSION=$(jq -r .version package.json)
+          CLI_VERSION=$(grep -oP "version: '\K[^']+" src/cli.ts)
+          EXPECTED="${{ steps.version.outputs.version }}"
+
+          if [ "$PKG_VERSION" != "$EXPECTED" ]; then
+            echo "::error::package.json version ($PKG_VERSION) != expected ($EXPECTED)"
+            exit 1
+          fi
+          if [ "$CLI_VERSION" != "$EXPECTED" ]; then
+            echo "::error::cli.ts version ($CLI_VERSION) != expected ($EXPECTED)"
+            exit 1
+          fi
+          echo "Both files updated to $EXPECTED"
+
+      - name: Commit and tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          git add package.json src/cli.ts
+          git commit -m "chore: bump version to ${VERSION} [skip ci]"
+          git tag "$TAG"
+          git push origin dev
+          git push origin "$TAG"
