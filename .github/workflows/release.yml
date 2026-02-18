@@ -49,6 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -75,9 +77,8 @@ jobs:
           NOTES=""
           if [ -n "$PREV_TAG" ]; then
             COMMITS=$(git log --oneline "${PREV_TAG}..${TAG}" --no-merges | sed 's/^/- /')
-            NOTES="${COMMITS}
-
-**Full Changelog**: [${PREV_TAG}...${TAG}](${REPO_URL}/compare/${PREV_TAG}...${TAG})"
+            CHANGELOG="**Full Changelog**: [${PREV_TAG}...${TAG}](${REPO_URL}/compare/${PREV_TAG}...${TAG})"
+            NOTES="$(printf '%s\n\n%s' "$COMMITS" "$CHANGELOG")"
           fi
 
           gh release create "$TAG" dist/* \
