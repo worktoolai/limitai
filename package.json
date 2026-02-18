@@ -1,6 +1,6 @@
 {
   "name": "limitai",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "LLM rate limit utilization monitor CLI",
   "type": "module",
   "bin": {
