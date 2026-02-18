@@ -86,7 +86,6 @@ Releases are fully automated via GitHub Actions:
 1. **PR merged to `dev`** → `version-bump.yml` runs:
    - Bumps patch version in `package.json` and `src/cli.ts`
    - Commits with `[skip ci]` and creates a `v*` tag
-   - Use PR labels `major` or `minor` to override bump type (default: `patch`)
 2. **Tag push** → `release.yml` runs:
    - Builds 4 platform binaries (macos/linux × arm64/x64)
    - Validates tag matches `package.json` version
