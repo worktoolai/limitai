@@ -12,6 +12,8 @@ jobs:
   version-bump:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -69,3 +71,11 @@ jobs:
           git tag "$TAG"
           git push origin dev
           git push origin "$TAG"
+
+  release:
+    needs: version-bump
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.version-bump.outputs.tag }}
+    permissions:
+      contents: write
