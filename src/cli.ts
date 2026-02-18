@@ -20,7 +20,7 @@ const runStatus = args.length === 0
 
 await cli(runStatus ? ['status'] : args, mainCommand, {
   name: 'limitai',
-  version: '0.1.9',
+  version: '0.1.10',
   description: 'LLM rate limit utilization monitor',
   renderHeader: null,
   subCommands: {
