@@ -16,9 +16,9 @@ const mainCommand = define({
 })
 
 const args = process.argv.slice(2)
-const showHelp = args.length === 0
+const runStatus = args.length === 0
 
-await cli(showHelp ? ['--help'] : args, mainCommand, {
+await cli(runStatus ? ['status'] : args, mainCommand, {
   name: 'limitai',
   version: '0.1.9',
   description: 'LLM rate limit utilization monitor',
