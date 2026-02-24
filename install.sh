@@ -62,46 +62,14 @@ if [ "$UNINSTALL" = true ]; then
     fi
 
     # Clean PATH entries from shell profiles
-    PATH_BLOCK_BEGIN="# >>> limitai PATH >>>"
-    PATH_BLOCK_END="# <<< limitai PATH <<<"
     CLEANED_PROFILES=()
-
-    uninstall_clean_profile() {
-        local profile="$1"
-        [ -f "$profile" ] || return 0
-
-        local cleaned
-        cleaned=$(mktemp)
-
-        awk -v block_begin="$PATH_BLOCK_BEGIN" -v block_end="$PATH_BLOCK_END" '
-            BEGIN { in_block = 0; pending = 0 }
-            {
-                if (in_block) {
-                    if ($0 == block_end) { in_block = 0 }
-                    next
-                }
-                if ($0 == block_begin) { in_block = 1; next }
-                if (pending) {
-                    pending = 0
-                    if ($0 ~ /^export PATH=".*:\$PATH"$/) { next }
-                    print "# limitai"
-                }
-                if ($0 == "# limitai") { pending = 1; next }
-                print
-            }
-            END { if (pending) print "# limitai" }
-        ' "$profile" > "$cleaned"
-
-        if ! cmp -s "$profile" "$cleaned"; then
-            mv "$cleaned" "$profile"
-            CLEANED_PROFILES+=("$profile")
-        else
-            rm -f "$cleaned"
+    for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+        [ -f "$rc" ] || continue
+        if grep -qF "$INSTALL_DIR" "$rc"; then
+            sed -i.bak "\\|${INSTALL_DIR}|d" "$rc"
+            rm -f "${rc}.bak"
+            CLEANED_PROFILES+=("$rc")
         fi
-    }
-
-    for p in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
-        uninstall_clean_profile "$p"
     done
 
     echo ""
@@ -202,6 +170,14 @@ fi
 
 chmod +x "$TMP_FILE"
 
+# --- Clean up legacy install path ---
+
+LEGACY_BIN="$HOME/.worktoolai/bin/${BINARY_NAME}"
+if [ -f "$LEGACY_BIN" ]; then
+    rm -f "$LEGACY_BIN"
+    echo "Removed legacy binary: ${LEGACY_BIN}"
+fi
+
 # --- Install ---
 
 mkdir -p "$INSTALL_DIR"
@@ -209,109 +185,24 @@ mv "$TMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
 
 # --- PATH injection ---
 
-PATH_ENTRY="export PATH=\"${INSTALL_DIR}:\$PATH\""
-PATH_BLOCK_BEGIN="# >>> limitai PATH >>>"
-PATH_BLOCK_END="# <<< limitai PATH <<<"
-SHELL_PROFILES=()
+PATH_LINE="export PATH=\"${INSTALL_DIR}:\$PATH\""
 UPDATED_PROFILES=()
 
-clean_limitai_path_entries() {
-    local profile="$1"
-    local output="$2"
-
-    awk -v block_begin="$PATH_BLOCK_BEGIN" -v block_end="$PATH_BLOCK_END" '
-        BEGIN {
-            in_managed_block = 0
-            pending_legacy_marker = 0
-        }
-
-        {
-            if (in_managed_block) {
-                if ($0 == block_end) {
-                    in_managed_block = 0
-                }
-                next
-            }
-
-            if ($0 == block_begin) {
-                in_managed_block = 1
-                next
-            }
-
-            if (pending_legacy_marker) {
-                pending_legacy_marker = 0
-                if ($0 ~ /^export PATH=".*:\$PATH"$/) {
-                    next
-                }
-                print "# limitai"
-            }
-
-            if ($0 == "# limitai") {
-                pending_legacy_marker = 1
-                next
-            }
-
-            print
-        }
-
-        END {
-            if (pending_legacy_marker) {
-                print "# limitai"
-            }
-        }
-    ' "$profile" > "$output"
-}
-
-if [ -n "$ZSH_VERSION" ] || [ -f "${ZDOTDIR:-$HOME}/.zshrc" ]; then
-    SHELL_PROFILES+=("${ZDOTDIR:-$HOME}/.zshrc")
-fi
-if [ -f "$HOME/.bashrc" ]; then
-    SHELL_PROFILES+=("$HOME/.bashrc")
-fi
-if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/.bash_profile" ]; then
-    SHELL_PROFILES+=("$HOME/.bash_profile")
-fi
-
-if [ ${#SHELL_PROFILES[@]} -eq 0 ]; then
-    touch "$HOME/.profile"
-    SHELL_PROFILES+=("$HOME/.profile")
-fi
-
-for profile in "${SHELL_PROFILES[@]}"; do
-    [ -f "$profile" ] || touch "$profile"
-
-    original_file=$(mktemp)
-    cleaned_file=$(mktemp)
-    final_file=$(mktemp)
-
-    cp "$profile" "$original_file"
-    clean_limitai_path_entries "$profile" "$cleaned_file"
-
-    if grep -qF "$PATH_ENTRY" "$cleaned_file"; then
-        cp "$cleaned_file" "$final_file"
-    else
-        awk -v block_begin="$PATH_BLOCK_BEGIN" -v block_end="$PATH_BLOCK_END" -v path_entry="$PATH_ENTRY" '
-            { print }
-            END {
-                if (NR > 0 && length($0) > 0) {
-                    print ""
-                }
-                print block_begin
-                print path_entry
-                print block_end
-            }
-        ' "$cleaned_file" > "$final_file"
-    fi
-
-    if ! cmp -s "$original_file" "$final_file"; then
-        mv "$final_file" "$profile"
-        UPDATED_PROFILES+=("$profile")
-    else
-        rm -f "$final_file"
-    fi
-
-    rm -f "$original_file" "$cleaned_file"
-done
+case ":$PATH:" in
+    *":${INSTALL_DIR}:"*)
+        ;;
+    *)
+        for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+            if [ -f "$rc" ]; then
+                if ! grep -qF "$INSTALL_DIR" "$rc"; then
+                    echo "" >> "$rc"
+                    echo "$PATH_LINE" >> "$rc"
+                    UPDATED_PROFILES+=("$rc")
+                fi
+            fi
+        done
+        ;;
+esac
 
 # --- Done ---
 
