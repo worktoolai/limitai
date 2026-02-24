@@ -1,7 +1,8 @@
 import type { AdditionalRateLimit, RateLimitResult } from '../types.ts'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
+import * as v from 'valibot'
 
 interface ClaudeCredentials {
   accessToken: string
@@ -110,13 +111,53 @@ async function readCredentialsFromKeychain(): Promise<ClaudeCredentials | null> 
   }
 }
 
-async function readClaudeCredentials(): Promise<ClaudeCredentials | null> {
-  const fromFile = await readCredentialsFromFile()
-  if (fromFile) {
-    return fromFile
+// CLIProxyAPI/tokenai flat token format for Claude
+const CliProxyClaudeTokenSchema = v.looseObject({
+  type: v.literal('claude'),
+  access_token: v.string(),
+  expired: v.nullish(v.string()),
+})
+
+const TOKENAI_AUTH_DIR = join(homedir(), '.worktoolai', 'tokenai', 'auth')
+
+async function readTokenaiClaudeAuth(): Promise<ClaudeCredentials | null> {
+  let files: string[]
+  try {
+    const entries = await readdir(TOKENAI_AUTH_DIR)
+    files = entries.filter(f => f.startsWith('claude-') && f.endsWith('.json'))
+  } catch {
+    return null
   }
 
-  return readCredentialsFromKeychain()
+  for (const file of files) {
+    try {
+      const content = await readFile(join(TOKENAI_AUTH_DIR, file), 'utf-8')
+      const json = JSON.parse(content)
+      const result = v.safeParse(CliProxyClaudeTokenSchema, json)
+      if (!result.success) continue
+
+      const token = result.output
+
+      // Skip expired tokens
+      if (token.expired && Date.now() >= new Date(token.expired).getTime()) continue
+
+      return { accessToken: token.access_token, subscriptionType: 'unknown' }
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
+
+async function readClaudeCredentials(): Promise<ClaudeCredentials | null> {
+  const fromFile = await readCredentialsFromFile()
+  if (fromFile) return fromFile
+
+  const fromKeychain = await readCredentialsFromKeychain()
+  if (fromKeychain) return fromKeychain
+
+  return readTokenaiClaudeAuth()
 }
 
 function normalizePlanType(subscriptionType: string): string {

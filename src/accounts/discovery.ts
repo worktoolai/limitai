@@ -24,7 +24,7 @@ export async function discoverAndFetch(filterAccount?: string): Promise<Discover
     if (codexAuth) {
       const baseUrl = await getCodexBaseUrl()
       const result = await fetchCodexRateLimits(baseUrl, codexAuth)
-      
+
       if (!filterAccount || result.account.id === filterAccount) {
         results.push(result)
       }
@@ -33,7 +33,15 @@ export async function discoverAndFetch(filterAccount?: string): Promise<Discover
       }
     }
   } catch (err: unknown) {
-    errors.push(`Codex native: ${(err as Error).message}`)
+    // Push as a result with error so it renders in the status display
+    const errResult: RateLimitResult = {
+      account: { id: 'codex-native', provider: 'codex', source: 'native' },
+      planType: 'unknown',
+      error: (err as Error).message,
+    }
+    if (!filterAccount || errResult.account.id === filterAccount) {
+      results.push(errResult)
+    }
   }
   
   try {
@@ -53,9 +61,12 @@ export async function discoverAndFetch(filterAccount?: string): Promise<Discover
       }
       return true
     })
-    
+
+    // Skip expired accounts — they are shown in `limitai auth` instead
+    const activeAccounts = uniqueAccounts.filter(acct => !acct.expired)
+
     const proxyResults = await Promise.allSettled(
-      uniqueAccounts.map(async (acct) => {
+      activeAccounts.map(async (acct) => {
         const credentials = toCodexCredentials(acct.token)
         const result = await fetchCodexRateLimits(baseUrl, credentials)
         return {
@@ -66,10 +77,11 @@ export async function discoverAndFetch(filterAccount?: string): Promise<Discover
             source: 'cliproxy' as const,
             email: acct.token.email,
           },
+          tokenPath: acct.filePath,
         }
       })
     )
-    
+
     for (const settled of proxyResults) {
       if (settled.status === 'fulfilled') {
         if (!filterAccount || settled.value.account.id === filterAccount) {

@@ -21,61 +21,84 @@ export interface DiscoveredCliProxyAccount {
   token: CliProxyToken
   filePath: string
   accountId: string
+  expired: boolean
+  expiredAt?: string
 }
 
-const DEFAULT_CLI_PROXY_DIR = join(homedir(), '.cli-proxy-api')
+const DEFAULT_AUTH_DIRS = [
+  join(homedir(), '.cli-proxy-api'),
+  join(homedir(), '.worktoolai', 'tokenai', 'auth'),
+]
 
 /**
- * Scan CLIProxyAPI auth directory for token files.
+ * Scan CLIProxyAPI auth directories for token files.
  * Returns discovered accounts (codex type only for now - claude handled separately).
- * 
+ *
+ * Scans multiple directories:
+ * - ~/.cli-proxy-api (CLIProxyAPI default)
+ * - ~/.worktoolai/tokenai/auth (tokenai login)
+ * - customDir (config override, prepended)
+ *
  * Policy:
  * - Permissive parsing: unknown fields ignored
  * - One file failure doesn't block others
  * - JSON parse failure: retry 1x after 50ms
+ * - Dedup by file path across directories
  */
 export async function discoverCliProxyAccounts(
   customDir?: string,
 ): Promise<{ accounts: DiscoveredCliProxyAccount[]; errors: string[] }> {
-  const dir = customDir || DEFAULT_CLI_PROXY_DIR
+  const dirs = customDir
+    ? [customDir, ...DEFAULT_AUTH_DIRS.filter(d => d !== customDir)]
+    : DEFAULT_AUTH_DIRS
   const accounts: DiscoveredCliProxyAccount[] = []
   const errors: string[] = []
   const existingIds = new Set<string>()
-  
-  let files: string[]
-  try {
-    const entries = await readdir(dir)
-    files = entries.filter(f => f.endsWith('.json'))
-  } catch {
-    // Directory doesn't exist — not an error, just no CLIProxyAPI accounts
-    return { accounts, errors }
-  }
-  
-  for (const file of files) {
-    const filePath = join(dir, file)
+  const seenAccountKeys = new Set<string>()
+
+  for (const dir of dirs) {
+    let files: string[]
     try {
-      const token = await readTokenFile(filePath)
-      if (!token) continue
-      
-      // Only process codex tokens for rate limit API
-      // Claude tokens will be used differently (Phase 3 uses CLI bridge instead)
-      if (token.type !== 'codex') continue
-      
-      const accountId = generateAccountId(
-        token.type,
-        'cliproxy',
-        token.email,
-        token.account_id,
-        existingIds,
-      )
-      existingIds.add(accountId)
-      
-      accounts.push({ token, filePath, accountId })
-    } catch (err: unknown) {
-      errors.push(`CLIProxyAPI ${file}: ${(err as Error).message}`)
+      const entries = await readdir(dir)
+      files = entries.filter(f => f.endsWith('.json'))
+    } catch {
+      // Directory doesn't exist — not an error, just skip
+      continue
+    }
+
+    for (const file of files) {
+      const filePath = join(dir, file)
+      try {
+        const token = await readTokenFile(filePath)
+        if (!token) continue
+
+        // Only process codex tokens for rate limit API
+        // Claude tokens will be used differently (Phase 3 uses CLI bridge instead)
+        if (token.type !== 'codex') continue
+
+        // Dedup: same account_id across directories
+        const dedup = `${token.type}:${token.account_id || token.email || file}`
+        if (seenAccountKeys.has(dedup)) continue
+        seenAccountKeys.add(dedup)
+
+        const tokenExpired = token.expired ? Date.now() >= new Date(token.expired).getTime() : false
+
+        const accountId = generateAccountId(
+          token.type,
+          'cliproxy',
+          token.email,
+          token.account_id,
+          existingIds,
+        )
+        existingIds.add(accountId)
+
+        accounts.push({ token, filePath, accountId, expired: tokenExpired, expiredAt: token.expired })
+      } catch (err: unknown) {
+        errors.push(`CLIProxyAPI ${file}: ${(err as Error).message}`)
+      }
     }
   }
-  
+
   return { accounts, errors }
 }
 

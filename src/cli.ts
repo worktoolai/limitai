@@ -8,6 +8,7 @@ import { installCommand } from './commands/install.ts'
 import { uninstallCommand } from './commands/uninstall.ts'
 import { doctorCommand } from './commands/doctor.ts'
 import { watchCommand } from './commands/watch.ts'
+import { authCommand } from './commands/auth.ts'
 
 const mainCommand = define({
   name: 'limitai',
@@ -20,7 +21,7 @@ const showHelp = args.length === 0
 
 await cli(showHelp ? ['--help'] : args, mainCommand, {
   name: 'limitai',
-  version: '0.1.9',
+  version: '0.2.0',
   description: 'LLM rate limit utilization monitor',
   renderHeader: null,
   subCommands: {
@@ -31,6 +32,7 @@ await cli(showHelp ? ['--help'] : args, mainCommand, {
     install: installCommand,
     uninstall: uninstallCommand,
     doctor: doctorCommand,
-    watch: watchCommand
+    watch: watchCommand,
+    auth: authCommand,
   }
 })

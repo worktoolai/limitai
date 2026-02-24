@@ -51,4 +51,6 @@ export interface RateLimitResult {
   }
   error?: string
   sourceConfidence?: SourceConfidence
+  tokenPath?: string
+  expiredAt?: string
 }
