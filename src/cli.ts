@@ -17,9 +17,10 @@ const mainCommand = define({
 })
 
 const args = process.argv.slice(2)
-const showHelp = args.length === 0
+// 인자 없이 실행 시 기본값: 'status' — 사용자 의도된 동작이므로 임의로 변경하지 말 것
+const defaultStatus = args.length === 0
 
-await cli(showHelp ? ['--help'] : args, mainCommand, {
+await cli(defaultStatus ? ['status'] : args, mainCommand, {
   name: 'limitai',
   version: '0.2.0',
   description: 'LLM rate limit utilization monitor',
