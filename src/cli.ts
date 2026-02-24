@@ -22,7 +22,7 @@ const defaultStatus = args.length === 0
 
 await cli(defaultStatus ? ['status'] : args, mainCommand, {
   name: 'limitai',
-  version: '0.2.0',
+  version: '0.2.1',
   description: 'LLM rate limit utilization monitor',
   renderHeader: null,
   subCommands: {
