@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -27,6 +32,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -49,15 +56,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
+      - name: Set tag name
+        id: tag
+        run: echo "name=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
       - name: Validate tag matches package.json version
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ steps.tag.outputs.name }}"
           PKG_VERSION="v$(jq -r .version package.json)"
           if [ "$TAG" != "$PKG_VERSION" ]; then
             echo "::error::Tag ($TAG) does not match package.json version ($PKG_VERSION)"
@@ -68,16 +82,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ steps.tag.outputs.name }}"
           PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
           REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
 
           NOTES=""
           if [ -n "$PREV_TAG" ]; then
             COMMITS=$(git log --oneline "${PREV_TAG}..${TAG}" --no-merges | sed 's/^/- /')
-            NOTES="${COMMITS}
-
-**Full Changelog**: [${PREV_TAG}...${TAG}](${REPO_URL}/compare/${PREV_TAG}...${TAG})"
+            CHANGELOG="**Full Changelog**: [${PREV_TAG}...${TAG}](${REPO_URL}/compare/${PREV_TAG}...${TAG})"
+            NOTES="$(printf '%s\n\n%s' "$COMMITS" "$CHANGELOG")"
           fi
 
           gh release create "$TAG" dist/* \
