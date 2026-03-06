@@ -1,4 +1,4 @@
-export type Provider = 'codex' | 'claude'
+export type Provider = 'codex' | 'claude' | 'gemini'
 export type SourceConfidence = 'direct' | 'estimated' | 'unknown'
 export type AccountSource = 'native' | 'cliproxy'
 

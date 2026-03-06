@@ -92,11 +92,17 @@ async function scanCliProxyTokens(): Promise<TokenInfo[]> {
         if (!result.success) continue
 
         const token = result.output
-        if (!token.access_token) continue
+        const nested = (json as Record<string, unknown>).token as Record<string, string> | undefined
 
-        const isExpired = token.expired
-          ? Date.now() >= new Date(token.expired).getTime()
+        // Gemini tokens nest credentials under a `token` object
+        const accessToken = token.access_token || nested?.access_token
+        if (!accessToken) continue
+
+        const expiry = token.expired || nested?.expiry || null
+        const isExpired = expiry
+          ? Date.now() >= new Date(expiry).getTime()
           : false
+        const refreshToken = token.refresh_token || nested?.refresh_token
         const lastRefreshMs = token.last_refresh ? new Date(token.last_refresh).getTime() : 0
 
         tokens.push({
@@ -104,11 +110,11 @@ async function scanCliProxyTokens(): Promise<TokenInfo[]> {
           provider: token.type || 'unknown',
           email: token.email || '-',
           accountId: token.account_id || null,
-          accessExpiry: token.expired || null,
-          refreshToken: !!token.refresh_token,
+          accessExpiry: expiry,
+          refreshToken: !!refreshToken,
           lastRefresh: token.last_refresh || null,
           lastRefreshMs,
-          status: token.expired ? (isExpired ? 'expired' : 'active') : 'unknown',
+          status: expiry ? (isExpired ? 'expired' : 'active') : 'unknown',
         })
       } catch {
         continue

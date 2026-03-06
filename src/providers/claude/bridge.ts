@@ -251,80 +251,172 @@ interface ClaudeCacheUsage {
     windowMinutes: number
     resetsAt: string | null
   }
+  additionalLimits?: AdditionalRateLimit[]
 }
 
-async function readHudUsageCache(): Promise<ClaudeCacheUsage | null> {
-  const cachePath = join(homedir(), '.claude', 'plugins', 'claude-hud', '.usage-cache.json')
-
-  try {
-    const content = await readFile(cachePath, 'utf-8')
-    const root = asObject(JSON.parse(content))
-    const data = root ? asObject(root.data) : null
-    if (!data) {
-      return null
-    }
-
-    const planName = typeof data.planName === 'string' ? data.planName : 'unknown'
-    const planType = normalizePlanType(planName)
-
-    const fiveHour = parsePercent(data.fiveHour)
-    const sevenDay = parsePercent(data.sevenDay)
-
-    if (fiveHour === null && sevenDay === null) {
-      return null
-    }
-
-    return {
-      planType,
-      primary: fiveHour === null
-        ? undefined
-        : {
-          usedPercent: fiveHour,
-          windowMinutes: 300,
-          resetsAt: parseIsoTimestamp(data.fiveHourResetAt),
-        },
-      secondary: sevenDay === null
-        ? undefined
-        : {
-          usedPercent: sevenDay,
-          windowMinutes: 10080,
-          resetsAt: parseIsoTimestamp(data.sevenDayResetAt),
-        },
-    }
-  } catch {
+function parseClaudeHudUsageCache(payload: unknown): ClaudeCacheUsage | null {
+  const root = asObject(payload)
+  const data = root ? asObject(root.data) : null
+  if (!data) {
     return null
   }
+
+  const planName = typeof data.planName === 'string' ? data.planName : 'unknown'
+  const planType = normalizePlanType(planName)
+
+  const fiveHour = parsePercent(data.fiveHour)
+  const sevenDay = parsePercent(data.sevenDay)
+
+  if (fiveHour === null && sevenDay === null) {
+    return null
+  }
+
+  return {
+    planType,
+    primary: fiveHour === null
+      ? undefined
+      : {
+        usedPercent: fiveHour,
+        windowMinutes: 300,
+        resetsAt: parseIsoTimestamp(data.fiveHourResetAt),
+      },
+    secondary: sevenDay === null
+      ? undefined
+      : {
+        usedPercent: sevenDay,
+        windowMinutes: 10080,
+        resetsAt: parseIsoTimestamp(data.sevenDayResetAt),
+      },
+  }
+}
+
+function parseOhMyClaudeCodeUsageCache(payload: unknown): ClaudeCacheUsage | null {
+  const root = asObject(payload)
+  const data = root ? asObject(root.data) : null
+  if (!data) {
+    return null
+  }
+
+  const fiveHour = parsePercent(data.fiveHourPercent)
+  const weekly = parsePercent(data.weeklyPercent)
+  const sonnetWeekly = parsePercent(data.sonnetWeeklyPercent)
+
+  if (fiveHour === null && weekly === null && sonnetWeekly === null) {
+    return null
+  }
+
+  const additionalLimits: AdditionalRateLimit[] = []
+  if (sonnetWeekly !== null) {
+    additionalLimits.push({
+      limitName: 'Sonnet only',
+      meteredFeature: 'seven_day_sonnet',
+      secondary: {
+        usedPercent: sonnetWeekly,
+        windowMinutes: 10080,
+        resetsAt: parseIsoTimestamp(data.sonnetWeeklyResetsAt),
+      },
+    })
+  }
+
+  return {
+    planType: 'unknown',
+    primary: fiveHour === null
+      ? undefined
+      : {
+        usedPercent: fiveHour,
+        windowMinutes: 300,
+        resetsAt: parseIsoTimestamp(data.fiveHourResetsAt),
+      },
+    secondary: weekly === null
+      ? undefined
+      : {
+        usedPercent: weekly,
+        windowMinutes: 10080,
+        resetsAt: parseIsoTimestamp(data.weeklyResetsAt),
+      },
+    additionalLimits,
+  }
+}
+
+async function readClaudeUsageCache(): Promise<ClaudeCacheUsage | null> {
+  const cacheCandidates = [
+    {
+      path: join(homedir(), '.claude', 'plugins', 'claude-hud', '.usage-cache.json'),
+      parse: parseClaudeHudUsageCache,
+    },
+    {
+      path: join(homedir(), '.claude', 'plugins', 'oh-my-claudecode', '.usage-cache.json'),
+      parse: parseOhMyClaudeCodeUsageCache,
+    },
+  ]
+
+  for (const candidate of cacheCandidates) {
+    try {
+      const content = await readFile(candidate.path, 'utf-8')
+      const parsed = candidate.parse(JSON.parse(content))
+      if (parsed) {
+        return parsed
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return null
 }
 
 async function fetchClaudeUsage(accessToken: string): Promise<{ data?: Record<string, unknown>; error?: string }> {
-  try {
-    const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'anthropic-beta': 'oauth-2025-04-20',
-        'User-Agent': 'limitai/0.1.0',
-      },
-      signal: AbortSignal.timeout(5000),
-    })
+  const MAX_RETRIES = 3
+  const BASE_DELAY_MS = 1000
 
-    if (response.status === 401 || response.status === 403) {
-      return { error: 'Auth expired - re-authenticate in Claude Code CLI' }
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'anthropic-beta': 'oauth-2025-04-20',
+          'User-Agent': 'limitai/0.1.0',
+        },
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        return { error: 'Auth expired - re-authenticate in Claude Code CLI' }
+      }
+
+      if (response.status === 429) {
+        if (attempt < MAX_RETRIES) {
+          const retryAfter = response.headers.get('retry-after')
+          const delayMs = retryAfter && !Number.isNaN(Number(retryAfter))
+            ? Math.min(Number(retryAfter) * 1000, 30000)
+            : BASE_DELAY_MS * Math.pow(2, attempt)
+          await wait(delayMs)
+          continue
+        }
+        return { error: 'Claude usage API rate limited (HTTP 429) - try again later' }
+      }
+
+      if (!response.ok) {
+        return { error: `Claude usage API error: HTTP ${response.status}` }
+      }
+
+      const body = await response.json()
+      const parsedBody = asObject(body)
+      if (!parsedBody) {
+        return { error: 'Claude usage API returned invalid response payload' }
+      }
+
+      return { data: parsedBody }
+    } catch (err: unknown) {
+      if (attempt < MAX_RETRIES) {
+        await wait(BASE_DELAY_MS * Math.pow(2, attempt))
+        continue
+      }
+      return { error: `Claude usage API network error: ${(err as Error).message}` }
     }
-
-    if (!response.ok) {
-      return { error: `Claude usage API error: HTTP ${response.status}` }
-    }
-
-    const body = await response.json()
-    const parsedBody = asObject(body)
-    if (!parsedBody) {
-      return { error: 'Claude usage API returned invalid response payload' }
-    }
-
-    return { data: parsedBody }
-  } catch (err: unknown) {
-    return { error: `Claude usage API network error: ${(err as Error).message}` }
   }
+
+  return { error: 'Claude usage API failed after retries' }
 }
 
 export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
@@ -336,13 +428,14 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
   
   const credentials = await readClaudeCredentials()
   if (!credentials) {
-    const cachedUsage = await readHudUsageCache()
+    const cachedUsage = await readClaudeUsageCache()
     if (cachedUsage) {
       return {
         account: { ...account, planType: cachedUsage.planType },
         planType: cachedUsage.planType,
         primary: cachedUsage.primary,
         secondary: cachedUsage.secondary,
+        additionalLimits: cachedUsage.additionalLimits,
         sourceConfidence: 'estimated',
       }
     }
@@ -357,13 +450,18 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
 
   const usage = await fetchClaudeUsage(credentials.accessToken)
   if (usage.error || !usage.data) {
-    const cachedUsage = await readHudUsageCache()
+    const cachedUsage = await readClaudeUsageCache()
     if (cachedUsage) {
+      const planType = cachedUsage.planType !== 'unknown'
+        ? cachedUsage.planType
+        : normalizePlanType(credentials.subscriptionType)
+
       return {
-        account: { ...account, planType: cachedUsage.planType },
-        planType: cachedUsage.planType,
+        account: { ...account, planType },
+        planType,
         primary: cachedUsage.primary,
         secondary: cachedUsage.secondary,
+        additionalLimits: cachedUsage.additionalLimits,
         sourceConfidence: 'estimated',
       }
     }

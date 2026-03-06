@@ -6,7 +6,7 @@ export interface LimitaiConfig {
   'cli-proxy-api-dir'?: string
 }
 
-const DEFAULT_CONFIG_PATH = join(homedir(), '.limitai', 'config.yaml')
+const DEFAULT_CONFIG_PATH = join(homedir(), '.worktoolai', 'limitai', 'config.yaml')
 
 export async function loadConfig(configPath?: string): Promise<LimitaiConfig> {
   const path = configPath || DEFAULT_CONFIG_PATH

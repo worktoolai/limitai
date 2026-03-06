@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { mkdirSync, chmodSync } from 'node:fs'
 
-const LIMITAI_DIR = join(homedir(), '.limitai')
+const LIMITAI_DIR = join(homedir(), '.worktoolai', 'limitai')
 const DB_PATH = join(LIMITAI_DIR, 'limitai.db')
 
 let _db: Database | null = null

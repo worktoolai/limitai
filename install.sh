@@ -4,7 +4,7 @@ set -e
 
 REPO="worktoolai/limitai"
 BINARY_NAME="limitai"
-INSTALL_DIR="$HOME/.local/bin"
+INSTALL_DIR="$HOME/.worktoolai/bin"
 
 # Parse arguments
 VERSION=""

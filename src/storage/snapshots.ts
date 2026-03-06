@@ -92,7 +92,7 @@ function mapRowToSnapshot(row: Record<string, unknown>): NormalizedSnapshot {
   return {
     accountId: row.account_id as string,
     capturedAt: row.captured_at as string,
-    provider: row.provider as 'codex' | 'claude',
+    provider: row.provider as 'codex' | 'claude' | 'gemini',
     windowId: (row.window_id as string) ?? '',
     usedPercent: row.used_percent as number | null,
     windowMinutes: row.window_minutes as number | null,
