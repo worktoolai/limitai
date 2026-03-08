@@ -3,3 +3,6 @@ dist/
 analysis/
 .DS_Store
 .worktoolai/
+.omc/
+.omx/
+config.yaml
