@@ -63,7 +63,7 @@ export function formatStatus(results: RateLimitResult[]): string {
     lines.push('')
     lines.push(`--- ${result.account.id}${planLabel} ${'---'.padStart(40 - result.account.id.length - planLabel.length, '-')}`)
     
-    if (result.error) {
+    if (result.error && !result.primary && !result.secondary && !result.additionalLimits?.length) {
       lines.push(`  Error: ${result.error}`)
       continue
     }
@@ -101,6 +101,10 @@ export function formatStatus(results: RateLimitResult[]): string {
       lines.push('  No rate limit data available')
     }
     
+    if (result.error) {
+      lines.push(`  ⚠ ${result.error}`)
+    }
+
     if (result.sourceConfidence === 'estimated') {
       lines.push('  (estimated data source)')
     }

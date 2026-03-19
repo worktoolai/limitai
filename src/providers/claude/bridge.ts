@@ -436,6 +436,7 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
         primary: cachedUsage.primary,
         secondary: cachedUsage.secondary,
         additionalLimits: cachedUsage.additionalLimits,
+        error: 'Claude OAuth credentials not found - using cached data',
         sourceConfidence: 'estimated',
       }
     }
@@ -462,6 +463,7 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
         primary: cachedUsage.primary,
         secondary: cachedUsage.secondary,
         additionalLimits: cachedUsage.additionalLimits,
+        error: usage.error,
         sourceConfidence: 'estimated',
       }
     }
