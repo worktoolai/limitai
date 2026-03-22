@@ -1,6 +1,7 @@
 import type { AdditionalRateLimit, RateLimitResult } from '../types.ts'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, userInfo } from 'node:os'
 import { readFile, readdir } from 'node:fs/promises'
 import * as v from 'valibot'
 
@@ -8,6 +9,29 @@ interface ClaudeCredentials {
   accessToken: string
   subscriptionType: string
 }
+
+interface ClaudeCredentialReadResult {
+  credentials: ClaudeCredentials | null
+  expiredAt: string | null
+}
+
+interface ClaudeCacheUsage {
+  planType: string
+  fetchedAt: number | null
+  primary?: {
+    usedPercent: number
+    windowMinutes: number
+    resetsAt: string | null
+  }
+  secondary?: {
+    usedPercent: number
+    windowMinutes: number
+    resetsAt: string | null
+  }
+  additionalLimits?: AdditionalRateLimit[]
+}
+
+const CLAUDE_CACHE_MAX_AGE_MS = 15 * 60 * 1000
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -40,74 +64,113 @@ function parseIsoTimestamp(value: unknown): string | null {
   return timestamp.toISOString()
 }
 
-function parseClaudeCredentials(payload: unknown): ClaudeCredentials | null {
+function parseClaudeCredentials(payload: unknown): ClaudeCredentialReadResult {
   const root = asObject(payload)
   const oauth = root ? asObject(root.claudeAiOauth) : null
   if (!oauth) {
-    return null
+    return { credentials: null, expiredAt: null }
   }
 
   const accessToken = typeof oauth.accessToken === 'string' ? oauth.accessToken.trim() : ''
   if (!accessToken) {
-    return null
+    return { credentials: null, expiredAt: null }
   }
 
   const expiresAt = typeof oauth.expiresAt === 'number' ? oauth.expiresAt : null
+  const expiredAt = expiresAt === null
+    ? null
+    : new Date(expiresAt).toISOString()
+
   if (expiresAt !== null && expiresAt <= Date.now()) {
-    return null
+    return { credentials: null, expiredAt }
   }
 
   const subscriptionType = typeof oauth.subscriptionType === 'string'
     ? oauth.subscriptionType
     : 'unknown'
 
-  return { accessToken, subscriptionType }
+  return {
+    credentials: { accessToken, subscriptionType },
+    expiredAt,
+  }
 }
 
-async function readCredentialsFromFile(): Promise<ClaudeCredentials | null> {
+async function readCredentialsFromFile(): Promise<ClaudeCredentialReadResult> {
   const credentialsPath = join(homedir(), '.claude', '.credentials.json')
 
   try {
     const content = await readFile(credentialsPath, 'utf-8')
     return parseClaudeCredentials(JSON.parse(content))
   } catch {
-    return null
+    return { credentials: null, expiredAt: null }
   }
 }
 
-async function readCredentialsFromKeychain(): Promise<ClaudeCredentials | null> {
+async function readCredentialsFromKeychain(): Promise<ClaudeCredentialReadResult> {
   if (process.platform !== 'darwin') {
-    return null
+    return { credentials: null, expiredAt: null }
   }
 
+  const serviceName = getClaudeKeychainServiceName()
+  const candidateAccounts: Array<string | undefined> = []
+
   try {
-    const proc = Bun.spawn([
-      '/usr/bin/security',
-      'find-generic-password',
-      '-s',
-      'Claude Code-credentials',
-      '-w',
-    ], { stdout: 'pipe', stderr: 'pipe' })
-
-    const timeoutReached = await Promise.race([
-      proc.exited.then(() => false),
-      wait(1500).then(() => true),
-    ])
-
-    if (timeoutReached) {
-      proc.kill()
-      return null
+    const username = userInfo().username?.trim()
+    if (username) {
+      candidateAccounts.push(username)
     }
-
-    const exitCode = await proc.exited
-    if (exitCode !== 0) {
-      return null
-    }
-
-    const stdout = await new Response(proc.stdout).text()
-    return parseClaudeCredentials(JSON.parse(stdout.trim()))
   } catch {
-    return null
+    // Best-effort only; fall back to legacy service-only lookup below.
+  }
+
+  candidateAccounts.push(undefined)
+
+  let expiredAt: string | null = null
+
+  try {
+    for (const account of candidateAccounts) {
+      const args = [
+        '/usr/bin/security',
+        'find-generic-password',
+        '-s',
+        serviceName,
+      ]
+
+      if (account) {
+        args.push('-a', account)
+      }
+
+      args.push('-w')
+
+      const proc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
+
+      const timeoutReached = await Promise.race([
+        proc.exited.then(() => false),
+        wait(1500).then(() => true),
+      ])
+
+      if (timeoutReached) {
+        proc.kill()
+        continue
+      }
+
+      const exitCode = await proc.exited
+      if (exitCode !== 0) {
+        continue
+      }
+
+      const stdout = await new Response(proc.stdout).text()
+      const parsed = parseClaudeCredentials(JSON.parse(stdout.trim()))
+      if (parsed.credentials) {
+        return parsed
+      }
+
+      expiredAt ??= parsed.expiredAt
+    }
+
+    return { credentials: null, expiredAt }
+  } catch {
+    return { credentials: null, expiredAt }
   }
 }
 
@@ -150,14 +213,32 @@ async function readTokenaiClaudeAuth(): Promise<ClaudeCredentials | null> {
   return null
 }
 
-async function readClaudeCredentials(): Promise<ClaudeCredentials | null> {
-  const fromFile = await readCredentialsFromFile()
-  if (fromFile) return fromFile
-
+async function readClaudeCredentials(): Promise<ClaudeCredentialReadResult> {
   const fromKeychain = await readCredentialsFromKeychain()
-  if (fromKeychain) return fromKeychain
+  if (fromKeychain.credentials) return fromKeychain
 
-  return readTokenaiClaudeAuth()
+  const fromFile = await readCredentialsFromFile()
+  if (fromFile.credentials) return fromFile
+
+  if (fromKeychain.expiredAt || fromFile.expiredAt) {
+    return {
+      credentials: null,
+      expiredAt: fromKeychain.expiredAt ?? fromFile.expiredAt,
+    }
+  }
+
+  const fromTokenai = await readTokenaiClaudeAuth()
+  return { credentials: fromTokenai, expiredAt: null }
+}
+
+function getClaudeKeychainServiceName(): string {
+  const configDir = process.env.CLAUDE_CONFIG_DIR?.trim()
+  if (!configDir) {
+    return 'Claude Code-credentials'
+  }
+
+  const hash = createHash('sha256').update(configDir).digest('hex').slice(0, 8)
+  return `Claude Code-credentials-${hash}`
 }
 
 function normalizePlanType(subscriptionType: string): string {
@@ -239,21 +320,6 @@ function parseClaudeAdditionalLimits(payload: Record<string, unknown>): Addition
   return additional
 }
 
-interface ClaudeCacheUsage {
-  planType: string
-  primary?: {
-    usedPercent: number
-    windowMinutes: number
-    resetsAt: string | null
-  }
-  secondary?: {
-    usedPercent: number
-    windowMinutes: number
-    resetsAt: string | null
-  }
-  additionalLimits?: AdditionalRateLimit[]
-}
-
 function parseClaudeHudUsageCache(payload: unknown): ClaudeCacheUsage | null {
   const root = asObject(payload)
   const data = root ? asObject(root.data) : null
@@ -273,6 +339,7 @@ function parseClaudeHudUsageCache(payload: unknown): ClaudeCacheUsage | null {
 
   return {
     planType,
+    fetchedAt: parseCacheTimestamp(root?.timestamp),
     primary: fiveHour === null
       ? undefined
       : {
@@ -320,6 +387,7 @@ function parseOhMyClaudeCodeUsageCache(payload: unknown): ClaudeCacheUsage | nul
 
   return {
     planType: 'unknown',
+    fetchedAt: parseCacheTimestamp(root?.timestamp),
     primary: fiveHour === null
       ? undefined
       : {
@@ -338,6 +406,35 @@ function parseOhMyClaudeCodeUsageCache(payload: unknown): ClaudeCacheUsage | nul
   }
 }
 
+function parseCacheTimestamp(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null
+  }
+
+  return value
+}
+
+function isClaudeCacheFresh(cache: ClaudeCacheUsage): boolean {
+  if (cache.fetchedAt !== null && Date.now() - cache.fetchedAt > CLAUDE_CACHE_MAX_AGE_MS) {
+    return false
+  }
+
+  const resetCandidates = [
+    cache.primary?.resetsAt,
+    cache.secondary?.resetsAt,
+    ...(cache.additionalLimits ?? []).flatMap(limit => [limit.primary?.resetsAt, limit.secondary?.resetsAt]),
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+  if (resetCandidates.length === 0) {
+    return true
+  }
+
+  return resetCandidates.some((value) => {
+    const timestamp = new Date(value).getTime()
+    return Number.isFinite(timestamp) && timestamp > Date.now()
+  })
+}
+
 async function readClaudeUsageCache(): Promise<ClaudeCacheUsage | null> {
   const cacheCandidates = [
     {
@@ -354,7 +451,7 @@ async function readClaudeUsageCache(): Promise<ClaudeCacheUsage | null> {
     try {
       const content = await readFile(candidate.path, 'utf-8')
       const parsed = candidate.parse(JSON.parse(content))
-      if (parsed) {
+      if (parsed && isClaudeCacheFresh(parsed)) {
         return parsed
       }
     } catch {
@@ -363,6 +460,16 @@ async function readClaudeUsageCache(): Promise<ClaudeCacheUsage | null> {
   }
 
   return null
+}
+
+export const __claudeBridgeInternals = {
+  CLAUDE_CACHE_MAX_AGE_MS,
+  getClaudeKeychainServiceName,
+  isClaudeCacheFresh,
+  parseCacheTimestamp,
+  parseClaudeCredentials,
+  parseClaudeHudUsageCache,
+  parseOhMyClaudeCodeUsageCache,
 }
 
 async function fetchClaudeUsage(accessToken: string): Promise<{ data?: Record<string, unknown>; error?: string }> {
@@ -426,8 +533,11 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
     source: 'native' as const,
   }
   
-  const credentials = await readClaudeCredentials()
+  const { credentials, expiredAt } = await readClaudeCredentials()
   if (!credentials) {
+    const authError = expiredAt
+      ? 'Claude session expired - re-authenticate in Claude Code CLI'
+      : 'Claude OAuth credentials not found - run `claude login`'
     const cachedUsage = await readClaudeUsageCache()
     if (cachedUsage) {
       return {
@@ -436,16 +546,18 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
         primary: cachedUsage.primary,
         secondary: cachedUsage.secondary,
         additionalLimits: cachedUsage.additionalLimits,
-        error: 'Claude OAuth credentials not found - using cached data',
+        error: authError,
         sourceConfidence: 'estimated',
+        expiredAt: expiredAt ?? undefined,
       }
     }
 
       return {
         account,
         planType: 'unknown',
-        error: 'Claude OAuth credentials not found - run `claude login`',
+        error: authError,
         sourceConfidence: 'unknown',
+        expiredAt: expiredAt ?? undefined,
       }
   }
 

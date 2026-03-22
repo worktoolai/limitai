@@ -9,7 +9,9 @@ LLM rate limit utilization monitor CLI (Bun + TypeScript).
 - **Validation**: valibot (looseObject for API resilience)
 - **Storage**: SQLite at `~/.worktoolai/limitai/limitai.db`
 - **Build**: `bun build src/cli.ts --compile --outfile dist/limitai`
-- **Deploy**: build → `codesign -f -s -` → copy to `~/.local/bin/limitai`
+- **Local install path**: `~/.worktoolai/bin/limitai`
+- **Deploy**: build → `codesign -f -s -` → install under `~/.worktoolai/bin/`
+- **Do not use**: `/opt/homebrew/bin/limitai` for local installs
 
 ## Providers
 

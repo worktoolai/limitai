@@ -79,6 +79,11 @@ limitai doctor          # Connection diagnostics
 limitai watch           # Run foreground polling loop
 ```
 
+## LOCAL INSTALL
+
+- Local install path: `~/.worktoolai/bin/limitai`
+- Do not use `/opt/homebrew/bin/limitai` for local installs
+
 ## RELEASE
 
 ```bash

@@ -30,6 +30,22 @@ function formatTimeRemaining(resetsAt: string | null): string {
   return `resets in ${hours}h ${minutes}m`
 }
 
+function formatWindowDuration(windowMinutes: number | null): string | null {
+  if (windowMinutes === null || !Number.isFinite(windowMinutes) || windowMinutes <= 0) {
+    return null
+  }
+
+  if (windowMinutes % 1440 === 0) {
+    return `${windowMinutes / 1440}d`
+  }
+
+  if (windowMinutes % 60 === 0) {
+    return `${windowMinutes / 60}h`
+  }
+
+  return `${windowMinutes}m`
+}
+
 function formatWindow(label: string, window: RateLimitWindow): string {
   const bar = progressBar(window.usedPercent)
   const pct = `${Math.round(window.usedPercent)}%`.padStart(4)
@@ -46,6 +62,23 @@ function formatAdditionalWindow(label: string, window: RateLimitWindow): string 
 
 function capitalizeFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function getMainWindowLabel(result: RateLimitResult, window: RateLimitWindow, fallback: string): string {
+  const duration = formatWindowDuration(window.windowMinutes)
+  if (!duration) {
+    return fallback
+  }
+
+  if (result.account.provider === 'claude') {
+    return `${duration} all`
+  }
+
+  return duration
+}
+
+function getAdditionalWindowLabel(window: RateLimitWindow, fallback: string): string {
+  return formatWindowDuration(window.windowMinutes) ?? fallback
 }
 
 export function formatStatus(results: RateLimitResult[]): string {
@@ -69,11 +102,11 @@ export function formatStatus(results: RateLimitResult[]): string {
     }
     
     if (result.primary) {
-      lines.push(formatWindow('Primary', result.primary))
+      lines.push(formatWindow(getMainWindowLabel(result, result.primary, 'Primary'), result.primary))
     }
     
     if (result.secondary) {
-      lines.push(formatWindow('Secondary', result.secondary))
+      lines.push(formatWindow(getMainWindowLabel(result, result.secondary, 'Secondary'), result.secondary))
     }
 
     if (result.additionalLimits && result.additionalLimits.length > 0) {
@@ -81,10 +114,10 @@ export function formatStatus(results: RateLimitResult[]): string {
       for (const additional of result.additionalLimits) {
         lines.push(`    ${additional.limitName}`)
         if (additional.primary) {
-          lines.push(formatAdditionalWindow('Primary', additional.primary))
+          lines.push(formatAdditionalWindow(getAdditionalWindowLabel(additional.primary, 'Primary'), additional.primary))
         }
         if (additional.secondary) {
-          lines.push(formatAdditionalWindow('Secondary', additional.secondary))
+          lines.push(formatAdditionalWindow(getAdditionalWindowLabel(additional.secondary, 'Secondary'), additional.secondary))
         }
       }
     }
