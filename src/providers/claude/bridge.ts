@@ -8,6 +8,8 @@ import * as v from 'valibot'
 interface ClaudeCredentials {
   accessToken: string
   subscriptionType: string
+  refreshToken?: string
+  expiresAt?: number
 }
 
 interface ClaudeCredentialReadResult {
@@ -89,8 +91,10 @@ function parseClaudeCredentials(payload: unknown): ClaudeCredentialReadResult {
     ? oauth.subscriptionType
     : 'unknown'
 
+  const refreshToken = typeof oauth.refreshToken === 'string' ? oauth.refreshToken.trim() : undefined
+
   return {
-    credentials: { accessToken, subscriptionType },
+    credentials: { accessToken, subscriptionType, refreshToken, expiresAt: expiresAt ?? undefined },
     expiredAt,
   }
 }
@@ -472,6 +476,110 @@ export const __claudeBridgeInternals = {
   parseOhMyClaudeCodeUsageCache,
 }
 
+const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
+const CLAUDE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
+const REFRESH_THRESHOLD_MS = 10 * 60 * 1000 // refresh when <10 min remaining
+
+async function refreshClaudeToken(refreshToken: string): Promise<ClaudeCredentials | null> {
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: CLAUDE_CLIENT_ID,
+    })
+
+    const response = await fetch(CLAUDE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!response.ok) return null
+
+    const data = await response.json() as Record<string, unknown>
+    const accessToken = typeof data.access_token === 'string' ? data.access_token : ''
+    if (!accessToken) return null
+
+    const expiresIn = typeof data.expires_in === 'number' ? data.expires_in : 3600
+    const newRefreshToken = typeof data.refresh_token === 'string' ? data.refresh_token : refreshToken
+    const scope = typeof data.scope === 'string' ? data.scope : ''
+
+    return {
+      accessToken,
+      subscriptionType: 'unknown',
+      refreshToken: newRefreshToken,
+      expiresAt: Date.now() + expiresIn * 1000,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function saveCredentialsToKeychain(newCreds: ClaudeCredentials): Promise<void> {
+  if (process.platform !== 'darwin') return
+
+  const serviceName = getClaudeKeychainServiceName()
+
+  // Read existing credentials JSON to preserve other fields
+  let existing: Record<string, unknown> = {}
+  try {
+    const username = userInfo().username?.trim()
+    const readArgs = ['/usr/bin/security', 'find-generic-password', '-s', serviceName]
+    if (username) readArgs.push('-a', username)
+    readArgs.push('-w')
+
+    const readProc = Bun.spawn(readArgs, { stdout: 'pipe', stderr: 'pipe' })
+    const done = await Promise.race([readProc.exited.then(() => false), wait(1500).then(() => true)])
+    if (!done && (await readProc.exited) === 0) {
+      const stdout = await new Response(readProc.stdout).text()
+      existing = JSON.parse(stdout.trim()) as Record<string, unknown>
+    }
+  } catch {
+    // Start fresh
+  }
+
+  // Update claudeAiOauth
+  const prevOauth = asObject(existing.claudeAiOauth) ?? {}
+  existing.claudeAiOauth = {
+    ...prevOauth,
+    accessToken: newCreds.accessToken,
+    refreshToken: newCreds.refreshToken,
+    expiresAt: newCreds.expiresAt,
+  }
+
+  const jsonStr = JSON.stringify(existing)
+  try {
+    const username = userInfo().username?.trim() ?? ''
+    const writeArgs = [
+      '/usr/bin/security', 'add-generic-password', '-U',
+      '-a', username,
+      '-s', serviceName,
+      '-w', jsonStr,
+    ]
+    const writeProc = Bun.spawn(writeArgs, { stdout: 'pipe', stderr: 'pipe' })
+    await writeProc.exited
+  } catch {
+    // Best-effort
+  }
+}
+
+async function maybeRefreshToken(credentials: ClaudeCredentials): Promise<ClaudeCredentials> {
+  if (!credentials.refreshToken || !credentials.expiresAt) return credentials
+
+  const timeLeft = credentials.expiresAt - Date.now()
+  if (timeLeft > REFRESH_THRESHOLD_MS) return credentials
+
+  const refreshed = await refreshClaudeToken(credentials.refreshToken)
+  if (!refreshed) return credentials
+
+  // Preserve subscriptionType from original
+  refreshed.subscriptionType = credentials.subscriptionType
+
+  await saveCredentialsToKeychain(refreshed)
+  return refreshed
+}
+
 async function fetchClaudeUsage(accessToken: string): Promise<{ data?: Record<string, unknown>; error?: string }> {
   const MAX_RETRIES = 3
   const BASE_DELAY_MS = 1000
@@ -533,8 +641,8 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
     source: 'native' as const,
   }
   
-  const { credentials, expiredAt } = await readClaudeCredentials()
-  if (!credentials) {
+  const { credentials: rawCredentials, expiredAt } = await readClaudeCredentials()
+  if (!rawCredentials) {
     const authError = expiredAt
       ? 'Claude session expired - re-authenticate in Claude Code CLI'
       : 'Claude OAuth credentials not found - run `claude login`'
@@ -560,6 +668,8 @@ export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
         expiredAt: expiredAt ?? undefined,
       }
   }
+
+  const credentials = await maybeRefreshToken(rawCredentials)
 
   const usage = await fetchClaudeUsage(credentials.accessToken)
   if (usage.error || !usage.data) {
