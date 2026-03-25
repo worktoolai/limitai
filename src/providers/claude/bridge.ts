@@ -581,57 +581,38 @@ async function maybeRefreshToken(credentials: ClaudeCredentials): Promise<Claude
 }
 
 async function fetchClaudeUsage(accessToken: string): Promise<{ data?: Record<string, unknown>; error?: string }> {
-  const MAX_RETRIES = 3
-  const BASE_DELAY_MS = 1000
+  try {
+    const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+        'User-Agent': 'limitai/0.1.0',
+      },
+      signal: AbortSignal.timeout(5000),
+    })
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetch('https://api.anthropic.com/api/oauth/usage', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'anthropic-beta': 'oauth-2025-04-20',
-          'User-Agent': 'limitai/0.1.0',
-        },
-        signal: AbortSignal.timeout(5000),
-      })
-
-      if (response.status === 401 || response.status === 403) {
-        return { error: 'Auth expired - re-authenticate in Claude Code CLI' }
-      }
-
-      if (response.status === 429) {
-        if (attempt < MAX_RETRIES) {
-          const retryAfter = response.headers.get('retry-after')
-          const delayMs = retryAfter && !Number.isNaN(Number(retryAfter))
-            ? Math.min(Number(retryAfter) * 1000, 30000)
-            : BASE_DELAY_MS * Math.pow(2, attempt)
-          await wait(delayMs)
-          continue
-        }
-        return { error: 'Claude usage API rate limited (HTTP 429) - try again later' }
-      }
-
-      if (!response.ok) {
-        return { error: `Claude usage API error: HTTP ${response.status}` }
-      }
-
-      const body = await response.json()
-      const parsedBody = asObject(body)
-      if (!parsedBody) {
-        return { error: 'Claude usage API returned invalid response payload' }
-      }
-
-      return { data: parsedBody }
-    } catch (err: unknown) {
-      if (attempt < MAX_RETRIES) {
-        await wait(BASE_DELAY_MS * Math.pow(2, attempt))
-        continue
-      }
-      return { error: `Claude usage API network error: ${(err as Error).message}` }
+    if (response.status === 401 || response.status === 403) {
+      return { error: 'Auth expired - re-authenticate in Claude Code CLI' }
     }
-  }
 
-  return { error: 'Claude usage API failed after retries' }
+    if (response.status === 429) {
+      return { error: 'Claude usage API rate limited (HTTP 429)' }
+    }
+
+    if (!response.ok) {
+      return { error: `Claude usage API error: HTTP ${response.status}` }
+    }
+
+    const body = await response.json()
+    const parsedBody = asObject(body)
+    if (!parsedBody) {
+      return { error: 'Claude usage API returned invalid response payload' }
+    }
+
+    return { data: parsedBody }
+  } catch (err: unknown) {
+    return { error: `Claude usage API network error: ${(err as Error).message}` }
+  }
 }
 
 export async function fetchClaudeStats(): Promise<RateLimitResult | null> {
